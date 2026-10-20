@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Оптовые заказы</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#f3f5f2;--card:#fff;--ink:#1c2420;--mut:#66736b;--line:#d9dfda;--acc:#1f6b52;--acc2:#e8f1ec;--warn:#b3402a}
+@media (prefers-color-scheme:dark){:root{--bg:#161a18;--card:#1f2522;--ink:#e8eeea;--mut:#9aa8a0;--line:#313a35;--acc:#4fb48f;--acc2:#24322c;--warn:#e07a63}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 "Trebuchet MS","Segoe UI",system-ui,sans-serif}
+header{padding:18px 16px 0;max-width:980px;margin:0 auto}
+h1{margin:0 0 12px;font-size:24px;letter-spacing:-.01em}
+nav{display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--line)}
+nav button{background:none;border:0;padding:10px 14px;font:inherit;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+nav button.on{color:var(--acc);border-color:var(--acc);font-weight:700}
+main{max-width:980px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:18px}
+label{display:block;font-size:14px;color:var(--mut);margin-bottom:4px}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{display:flex;align-items:center;gap:6px;margin:0;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:6px 12px;cursor:pointer}
+.chips input{width:auto}
+.chips input[type=number]{width:62px;padding:3px 6px}
+.btn{font:inherit;background:var(--acc);color:#fff;border:0;border-radius:6px;padding:10px 16px;cursor:pointer;font-weight:700}
+.btn.sec{background:var(--acc2);color:var(--acc)}
+.btn.del{background:none;color:var(--warn);padding:6px 10px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-size:14px}
+th{color:var(--mut);font-weight:600}
+td input,td select{padding:5px 6px;font-size:14px}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:12px;font:16px/1.6 Consolas,monospace;white-space:pre-wrap;margin:0}
+.tot{font-weight:700;margin:10px 0}
+.mut{color:var(--mut);font-size:14px}
+.warn{color:var(--warn)}
+details{border-top:1px solid var(--line);padding:10px 0}
+summary{cursor:pointer}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+<h1>Оптовый заказ: бельё</h1>
+<nav id="nav"></nav>
+</header>
+<main id="app"></main>
+<script>
+const KEY='opt-orders-v1';
+const TG=window.Telegram&&Telegram.WebApp;
+if(TG){try{TG.ready();TG.expand()}catch(e){}}
+const tgUser=(TG&&TG.initDataUnsafe&&TG.initDataUnsafe.user)||null;
+const tgName=tgUser?[tgUser.first_name,tgUser.last_name].filter(Boolean).join(' '):'';
+function copy(text){
+ try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text);return}}catch(e){}
+ const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();try{document.execCommand('copy')}catch(e){}t.remove();
+}
+function share(text){
+ const u='https://t.me/share/url?url=&text='+encodeURIComponent(text);
+ if(TG&&TG.openTelegramLink)TG.openTelegramLink(u);else window.open(u,'_blank');
+}
+const defaults={
+ settings:{genders:['Женский','Мужской'],tiers:['Дешёвый','Дорогой'],sizes:['Средний','Детский','Великан'],pass:'admin'},
+ products:[
+  ['Женские классика','Женский','Дешёвый','Средний',10,25],['Женские кружево','Женский','Дорогой','Средний',10,60],
+  ['Женские большие','Женский','Дешёвый','Великан',10,35],['Женские большие премиум','Женский','Дорогой','Великан',6,80],
+  ['Девочки хлопок','Женский','Дешёвый','Детский',12,18],['Девочки принт','Женский','Дорогой','Детский',12,30],
+  ['Мужские боксеры','Мужской','Дешёвый','Средний',10,30],['Мужские боксеры премиум','Мужской','Дорогой','Средний',6,70],
+  ['Мужские большие','Мужской','Дешёвый','Великан',10,40],['Мужские большие премиум','Мужской','Дорогой','Великан',6,90],
+  ['Мальчики хлопок','Мужской','Дешёвый','Детский',12,20],['Мальчики принт','Мужской','Дорогой','Детский',12,35]
+ ].map((p,i)=>({id:i+1,name:p[0],gender:p[1],tier:p[2],size:p[3],pack:p[4],price:p[5]})),
+ orders:[]
+};
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+if(!S||!S.products)S=JSON.parse(JSON.stringify(defaults));
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=id=>document.getElementById(id);
+let tab='order',admin=false,draft=null,histFilter='';
+const tabs=[['order','Новый заказ'],['history','История'],['admin','Админ-панель']];
+
+function nav(){
+ $('nav').innerHTML=tabs.map(t=>`<button class="${tab===t[0]?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
+ $('nav').onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;render()}};
+}
+function render(){nav();({order:viewOrder,history:viewHistory,admin:viewAdmin})[tab]()}
+
+/* ---------- формат строки заказа ---------- */
+const lineText=l=>l.packs>1?`${l.pack}х${l.packs}х${l.price}`:`${l.pack}х${l.price}`;
+const sum=ls=>ls.reduce((a,l)=>({pcs:a.pcs+l.pack*l.packs,money:a.money+l.pack*l.packs*l.price}),{pcs:0,money:0});
+const fmt=n=>n.toLocaleString('ru-RU');
+const orderText=(ls,name)=>{
+ const s=sum(ls.filter(l=>l.packs>0));
+ return (name?name+'\n':'')+ls.filter(l=>l.packs>0).map(lineText).join('\n')+`\n\nИтого: ${fmt(s.pcs)} шт, ${fmt(s.money)}`;
+};
+
+/* ---------- подбор ---------- */
+function build(budget,items,tol){
+ const L=items.map(p=>({pid:p.id,name:p.name,pack:p.pack,price:p.price,packs:0,w:p.w,c:p.pack*p.price}));
+ const W=L.reduce((a,l)=>a+l.w,0),cap=budget*(1+tol/100);
+ L.forEach(l=>l.t=budget*l.w/W);
+ let sp=0;
+ const dv=(l,k)=>(l.t-l.c*k)**2,A=400,pen=x=>(x<budget?5*A:A)*(budget-x)**2;
+ /* 1. подбор по долям, не выше суммы */
+ while(true){
+  const ok=L.filter(l=>sp+l.c<=budget).sort((a,b)=>(b.t-b.c*b.packs)-(a.t-a.c*a.packs));
+  if(!ok.length)break;
+  ok[0].packs++;sp+=ok[0].c;
+ }
+ /* 2. доводка: добавить, убрать или заменить упаковку, допуск сверху до tol% */
+ for(let g=0;g<3000;g++){
+  let best=-1e-9,mv=null;
+  for(const a of L){
+   if(sp+a.c<=cap){
+    const d=dv(a,a.packs+1)-dv(a,a.packs)+pen(sp+a.c)-pen(sp);
+    if(d<best){best=d;mv=[null,a]}
+   }
+   if(a.packs>0){
+    const d=dv(a,a.packs-1)-dv(a,a.packs)+pen(sp-a.c)-pen(sp);
+    if(d<best){best=d;mv=[a,null]}
+    for(const b of L){
+     if(b===a)continue;
+     const ns=sp-a.c+b.c;
+     if(ns>cap)continue;
+     const d2=dv(a,a.packs-1)-dv(a,a.packs)+dv(b,b.packs+1)-dv(b,b.packs)+pen(ns)-pen(sp);
+     if(d2<best){best=d2;mv=[a,b]}
+    }
+   }
+  }
+  if(!mv)break;
+  if(mv[0]){mv[0].packs--;sp-=mv[0].c}
+  if(mv[1]){mv[1].packs++;sp+=mv[1].c}
+ }
+ return L;
+}
+function chips(id,list){const d=Math.round(100/list.length);return `<div class="chips" id="${id}">`+list.map(v=>`<label><input type="checkbox" value="${esc(v)}" checked>${esc(v)}<input type="number" min="0" max="100" value="${d}" aria-label="Доля, %">%</label>`).join('')+'</div>'}
+const weights=id=>{const o={};document.querySelectorAll(`#${id} label`).forEach(l=>{const c=l.querySelector('input[type=checkbox]'),n=+l.querySelector('input[type=number]').value;if(c.checked&&n>0)o[c.value]=n});return o};
+
+function viewOrder(){
+ $('app').innerHTML=`
+ <div class="card"><h2>Параметры</h2>
+  <div class="row">
+   <div><label>Заказчик</label><input id="cust" placeholder="Имя или компания" value="${esc(tgName)}"></div>
+   <div><label>Сумма заказа (например 5000, 20000, 30000)</label><input id="total" type="number" min="1" value="5000"></div>
+   <div><label>Можно выше суммы, %</label><input id="tol" type="number" min="0" step="0.1" value="1"></div>
+  </div>
+  <p></p><label>Пол</label>${chips('fg',S.settings.genders)}
+  <p></p><label>Цена</label>${chips('ft',S.settings.tiers)}
+  <p></p><label>Размер</label>${chips('fs',S.settings.sizes)}
+  <div class="bar"><button class="btn" id="go">Подобрать ассортимент</button></div>
+  <p class="mut">Рядом с каждым пунктом укажите долю суммы в процентах, например дешёвый 70, дорогой 30. Доли считаются отдельно по полу, цене и размеру и перемножаются, поэтому в сумме они не обязаны давать 100. Снятая галочка или 0 убирает пункт. Итог может превысить сумму не больше чем на допуск сверху.</p>
+ </div>
+ <div id="res"></div>`;
+ $('go').onclick=()=>{
+  const g=weights('fg'),t=weights('ft'),s=weights('fs');
+  const items=S.products.filter(p=>g[p.gender]&&t[p.tier]&&s[p.size]&&p.pack>0&&p.price>0).map(p=>({...p,w:g[p.gender]*t[p.tier]*s[p.size]}));
+  const total=+$('total').value;
+  if(!items.length||!(total>0)){$('res').innerHTML='<div class="card warn">Нет подходящих товаров с ценой или не указана сумма.</div>';return}
+  draft={customer:$('cust').value.trim(),target:total,lines:build(total,items,Math.max(0,+$('tol').value||0))};
+  showDraft();
+ };
+ if(draft)showDraft(true);
+}
+function showDraft(keep){
+ const d=draft,s=sum(d.lines),diff=d.target-s.money;
+ $('res').innerHTML=`<div class="card"><h2>Заказ</h2>
+ <div class="scroll"><table><tr><th>Товар</th><th>В упаковке</th><th>Упаковок</th><th>Цена</th><th>Штук</th><th>Сумма</th><th>Доля</th></tr>
+ ${d.lines.map((l,i)=>`<tr><td>${esc(l.name)}</td><td>${l.pack}</td><td><input type="number" min="0" value="${l.packs}" data-i="${i}" style="width:80px"></td><td>${l.price}</td><td>${l.pack*l.packs}</td><td>${fmt(l.pack*l.packs*l.price)}</td><td>${s.money?(l.pack*l.packs*l.price/s.money*100).toFixed(1):0}%</td></tr>`).join('')}</table></div>
+ <div class="tot">Итого: ${fmt(s.pcs)} шт, сумма ${fmt(s.money)}${diff>0?` <span class="mut">(не добрано до суммы ${fmt(diff)})</span>`:diff<0?` <span class="mut">(выше суммы на ${fmt(-diff)})</span>`:''}</div>
+ <pre id="txt">${esc(orderText(d.lines,''))}</pre>
+ <div class="bar"><button class="btn" id="sv">Сохранить в историю</button><button class="btn sec" id="cp">Копировать</button><button class="btn sec" id="sh">Отправить в Telegram</button></div></div>`;
+ document.querySelectorAll('#res input[data-i]').forEach(inp=>inp.onchange=()=>{d.lines[+inp.dataset.i].packs=Math.max(0,Math.floor(+inp.value||0));showDraft()});
+ $('cp').onclick=()=>{copy($('txt').textContent);$('cp').textContent='Скопировано'};
+ $('sh').onclick=()=>share(($('txt').textContent));
+ $('sv').onclick=()=>{
+  const ls=d.lines.filter(l=>l.packs>0).map(l=>({name:l.name,pack:l.pack,packs:l.packs,price:l.price}));
+  if(!ls.length)return;
+  const ss=sum(ls);
+  S.orders.unshift({id:Date.now(),date:new Date().toISOString(),customer:d.customer||'Без имени',lines:ls,pcs:ss.pcs,money:ss.money});
+  save();draft=null;tab='history';render();
+ };
+}
+
+/* ---------- история ---------- */
+function viewHistory(){
+ const f=histFilter.toLowerCase();
+ const list=S.orders.filter(o=>o.customer.toLowerCase().includes(f));
+ $('app').innerHTML=`<div class="card"><h2>История заказов</h2>
+ <label>Поиск по заказчику</label><input id="hf" value="${esc(histFilter)}" placeholder="Имя">
+ <p></p>${list.length?list.map(o=>`<details><summary><b>${esc(o.customer)}</b> — ${new Date(o.date).toLocaleString('ru-RU')} — ${fmt(o.pcs)} шт, ${fmt(o.money)}</summary>
+ <pre>${esc(orderText(o.lines,''))}</pre>
+ <div class="bar"><button class="btn sec" data-cp="${o.id}">Копировать</button><button class="btn sec" data-sh="${o.id}">Отправить в Telegram</button><button class="btn del" data-del="${o.id}">Удалить</button></div></details>`).join(''):'<p class="mut">Заказов пока нет. Подберите первый на вкладке «Новый заказ».</p>'}</div>`;
+ $('hf').oninput=e=>{histFilter=e.target.value;const p=e.target.selectionStart;viewHistory();const n=$('hf');n.focus();n.setSelectionRange(p,p)};
+ $('app').onclick=e=>{
+  const c=e.target.dataset.cp,d=e.target.dataset.del,h=e.target.dataset.sh;
+  if(h){const o=S.orders.find(x=>x.id==h);share(orderText(o.lines,o.customer))}
+  if(c){const o=S.orders.find(x=>x.id==c);copy(orderText(o.lines,o.customer));e.target.textContent='Скопировано'}
+  if(d&&confirm('Удалить заказ?')){S.orders=S.orders.filter(x=>x.id!=d);save();viewHistory()}
+ };
+}
+
+/* ---------- админ ---------- */
+function viewAdmin(){
+ if(!admin){
+  $('app').innerHTML=`<div class="card" style="max-width:360px"><h2>Вход</h2><label>Пароль</label><input id="pw" type="password"><div class="bar"><button class="btn" id="in">Войти</button></div><p class="mut">Пароль по умолчанию: admin. Смените его после входа.</p></div>`;
+  $('in').onclick=()=>{if($('pw').value===S.settings.pass){admin=true;render()}else{$('pw').value='';$('pw').placeholder='Неверный пароль'}};
+  return;
+ }
+ const opt=(list,v)=>list.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
+ const st=S.settings;
+ $('app').innerHTML=`
+ <div class="card"><h2>Категории</h2><p class="mut">Через запятую. При переименовании обновите товары вручную.</p>
+ <div class="row">
+  <div><label>Пол</label><input data-s="genders" value="${esc(st.genders.join(', '))}"></div>
+  <div><label>Цена</label><input data-s="tiers" value="${esc(st.tiers.join(', '))}"></div>
+  <div><label>Размер</label><input data-s="sizes" value="${esc(st.sizes.join(', '))}"></div>
+  <div><label>Пароль админа</label><input data-s="pass" value="${esc(st.pass)}"></div>
+ </div></div>
+ <div class="card"><h2>Товары</h2>
+ <p class="${S.dirty?'warn':'mut'}">${S.dirty?'Изменения есть только на этом устройстве. Чтобы они появились у всех: нажмите «Скачать каталог для сайта» и загрузите файл catalog.json в репозиторий GitHub вместо старого.':'Каталог совпадает с сайтом. После изменений скачайте catalog.json и загрузите в репозиторий, тогда цены обновятся у всех.'}</p><div class="scroll"><table>
+ <tr><th>Название</th><th>Пол</th><th>Цена</th><th>Размер</th><th>В упак.</th><th>Цена, шт</th><th></th></tr>
+ ${S.products.map(p=>`<tr>
+  <td><input data-p="${p.id}" data-k="name" value="${esc(p.name)}"></td>
+  <td><select data-p="${p.id}" data-k="gender">${opt(st.genders,p.gender)}</select></td>
+  <td><select data-p="${p.id}" data-k="tier">${opt(st.tiers,p.tier)}</select></td>
+  <td><select data-p="${p.id}" data-k="size">${opt(st.sizes,p.size)}</select></td>
+  <td><input type="number" min="1" style="width:70px" data-p="${p.id}" data-k="pack" value="${p.pack}"></td>
+  <td><input type="number" min="0" step="any" style="width:80px" data-p="${p.id}" data-k="price" value="${p.price}"></td>
+  <td><button class="btn del" data-rm="${p.id}">Удалить</button></td></tr>`).join('')}</table></div>
+ <div class="bar"><button class="btn" id="add">Добавить товар</button><button class="btn" id="cat">Скачать каталог для сайта</button><button class="btn sec" id="exp">Скачать резервную копию</button>
+ <button class="btn sec" id="imp">Загрузить копию</button><button class="btn sec" id="out">Выйти</button></div>
+ <input type="file" id="file" accept=".json" class="hide"></div>`;
+ $('app').onchange=e=>{
+  const t=e.target;
+  if(t.dataset.s){const k=t.dataset.s;S.settings[k]=k==='pass'?t.value:t.value.split(',').map(x=>x.trim()).filter(Boolean);if(k!=='pass')S.dirty=true;save();if(k!=='pass')viewAdmin();return}
+  if(t.dataset.p){const p=S.products.find(x=>x.id==t.dataset.p),k=t.dataset.k;p[k]=['pack','price'].includes(k)?+t.value:t.value;S.dirty=true;save()}
+ };
+ $('app').onclick=e=>{
+  const r=e.target.dataset.rm;
+  if(r&&confirm('Удалить товар?')){S.products=S.products.filter(x=>x.id!=r);S.dirty=true;save();viewAdmin()}
+ };
+ $('add').onclick=()=>{S.products.push({id:Date.now(),name:'Новый товар',gender:st.genders[0],tier:st.tiers[0],size:st.sizes[0],pack:10,price:0});S.dirty=true;save();viewAdmin()};
+ $('cat').onclick=()=>{const {pass,...st}=S.settings;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:st,products:S.products},null,1)],{type:'application/json'}));a.download='catalog.json';a.click();S.dirty=false;save();viewAdmin()};
+ $('out').onclick=()=>{admin=false;render()};
+ $('exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='backup.json';a.click()};
+ $('imp').onclick=()=>$('file').click();
+ $('file').onchange=e=>{const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(d.products&&d.settings){S=d;save();viewAdmin()}}catch(x){alert('Файл не подходит')}};r.readAsText(e.target.files[0])};
+}
+render();
+(async function(){
+ try{
+  const r=await fetch('catalog.json?'+Date.now(),{cache:'no-store'});
+  if(!r.ok)return;
+  const c=await r.json();
+  if(!c.products||!c.settings||S.dirty)return;
+  S.products=c.products;
+  S.settings={...c.settings,pass:S.settings.pass};
+  save();render();
+ }catch(e){}
+})();
+</script>
+</body>
+</html>
