@@ -22,6 +22,10 @@ label{display:block;font-size:14px;color:var(--mut);margin-bottom:4px}
 input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%}
 input:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{font:inherit;padding:8px 18px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:20px;cursor:pointer}
+.tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:700}
+h3{margin:16px 0 6px;font-size:16px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chips label{display:flex;align-items:center;gap:6px;margin:0;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:6px 12px;cursor:pointer}
 .chips input{width:auto}
@@ -67,13 +71,13 @@ function share(text){
 const defaults={
  settings:{genders:['Женский','Мужской'],tiers:['Дешёвый','Дорогой'],sizes:['Средний','Детский','Великан'],pass:'admin'},
  products:[
-  ['Женские классика','Женский','Дешёвый','Средний',10,25],['Женские кружево','Женский','Дорогой','Средний',10,60],
-  ['Женские большие','Женский','Дешёвый','Великан',10,35],['Женские большие премиум','Женский','Дорогой','Великан',6,80],
-  ['Девочки хлопок','Женский','Дешёвый','Детский',12,18],['Девочки принт','Женский','Дорогой','Детский',12,30],
-  ['Мужские боксеры','Мужской','Дешёвый','Средний',10,30],['Мужские боксеры премиум','Мужской','Дорогой','Средний',6,70],
-  ['Мужские большие','Мужской','Дешёвый','Великан',10,40],['Мужские большие премиум','Мужской','Дорогой','Великан',6,90],
-  ['Мальчики хлопок','Мужской','Дешёвый','Детский',12,20],['Мальчики принт','Мужской','Дорогой','Детский',12,35]
- ].map((p,i)=>({id:i+1,name:p[0],gender:p[1],tier:p[2],size:p[3],pack:p[4],price:p[5]})),
+  ['Женские классика','Женский','Дешёвый','Средний',10,25,'Слипы'],['Женские кружево','Женский','Дорогой','Средний',10,60,'Кружево'],
+  ['Женские большие','Женский','Дешёвый','Великан',10,35,'Слипы'],['Женские большие премиум','Женский','Дорогой','Великан',6,80,'Кружево'],
+  ['Девочки хлопок','Женский','Дешёвый','Детский',12,18,'Слипы'],['Девочки принт','Женский','Дорогой','Детский',12,30,'Принт'],
+  ['Мужские боксеры','Мужской','Дешёвый','Средний',10,30,'Боксеры'],['Мужские боксеры премиум','Мужской','Дорогой','Средний',6,70,'Боксеры'],
+  ['Мужские большие','Мужской','Дешёвый','Великан',10,40,'Боксеры'],['Мужские большие премиум','Мужской','Дорогой','Великан',6,90,'Боксеры'],
+  ['Мальчики хлопок','Мужской','Дешёвый','Детский',12,20,'Боксеры'],['Мальчики принт','Мужской','Дорогой','Детский',12,35,'Принт']
+ ].map((p,i)=>({id:i+1,name:p[0],gender:p[1],tier:p[2],size:p[3],pack:p[4],price:p[5],cat:p[6]})),
  orders:[]
 };
 let S;
@@ -89,7 +93,7 @@ function nav(){
  $('nav').innerHTML=tabs.map(t=>`<button class="${tab===t[0]?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
  $('nav').onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;render()}};
 }
-function render(){nav();({order:viewOrder,history:viewHistory,admin:viewAdmin})[tab]()}
+function render(){nav();$('app').onclick=$('app').oninput=$('app').onchange=null;({order:viewOrder,history:viewHistory,admin:viewAdmin})[tab]()}
 
 /* ---------- формат строки заказа ---------- */
 const lineText=l=>l.packs>1?`${l.pack}х${l.packs}х${l.price}`:`${l.pack}х${l.price}`;
@@ -101,26 +105,22 @@ const orderText=(ls,name)=>{
 };
 
 /* ---------- подбор ---------- */
-function build(budget,items,tol){
+function build(budget,items,cap){
  const L=items.map(p=>({pid:p.id,name:p.name,pack:p.pack,price:p.price,packs:0,w:p.w,c:p.pack*p.price}));
- const W=L.reduce((a,l)=>a+l.w,0),cap=budget*(1+tol/100);
+ const W=L.reduce((a,l)=>a+l.w,0);
+ if(budget<=0||!W)return L;
  L.forEach(l=>l.t=budget*l.w/W);
  let sp=0;
  const dv=(l,k)=>(l.t-l.c*k)**2,A=400,pen=x=>(x<budget?5*A:A)*(budget-x)**2;
- /* 1. подбор по долям, не выше суммы */
  while(true){
   const ok=L.filter(l=>sp+l.c<=budget).sort((a,b)=>(b.t-b.c*b.packs)-(a.t-a.c*a.packs));
   if(!ok.length)break;
   ok[0].packs++;sp+=ok[0].c;
  }
- /* 2. доводка: добавить, убрать или заменить упаковку, допуск сверху до tol% */
  for(let g=0;g<3000;g++){
   let best=-1e-9,mv=null;
   for(const a of L){
-   if(sp+a.c<=cap){
-    const d=dv(a,a.packs+1)-dv(a,a.packs)+pen(sp+a.c)-pen(sp);
-    if(d<best){best=d;mv=[null,a]}
-   }
+   if(sp+a.c<=cap){const d=dv(a,a.packs+1)-dv(a,a.packs)+pen(sp+a.c)-pen(sp);if(d<best){best=d;mv=[null,a]}}
    if(a.packs>0){
     const d=dv(a,a.packs-1)-dv(a,a.packs)+pen(sp-a.c)-pen(sp);
     if(d<best){best=d;mv=[a,null]}
@@ -139,52 +139,148 @@ function build(budget,items,tol){
  }
  return L;
 }
-function chips(id,list){const d=Math.round(100/list.length);return `<div class="chips" id="${id}">`+list.map(v=>`<label><input type="checkbox" value="${esc(v)}" checked>${esc(v)}<input type="number" min="0" max="100" value="${d}" aria-label="Доля, %">%</label>`).join('')+'</div>'}
-const weights=id=>{const o={};document.querySelectorAll(`#${id} label`).forEach(l=>{const c=l.querySelector('input[type=checkbox]'),n=+l.querySelector('input[type=number]').value;if(c.checked&&n>0)o[c.value]=n});return o};
+
+/* ---------- заказ ---------- */
+let pick={},gTab,fSize='',fTier='',form={cust:tgName||'',total:5000,tol:1};
+const P=id=>pick[id]||(pick[id]={on:false,fix:'',pct:''});
+const selCount=()=>S.products.filter(p=>P(p.id).on).length;
+const options=(list,v)=>'<option value="">Все</option>'+list.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('');
 
 function viewOrder(){
+ const st=S.settings;
+ if(!st.genders.includes(gTab))gTab=st.genders[0];
+ const vis=S.products.filter(p=>p.gender===gTab&&(!fSize||p.size===fSize)&&(!fTier||p.tier===fTier));
+ const cats=[...new Set(vis.map(p=>p.cat||'Без категории'))];
+ const row=p=>{const q=P(p.id);return `<tr><td><input type="checkbox" data-id="${p.id}" data-k="on" ${q.on?'checked':''} aria-label="В заказ"></td><td>${esc(p.name)}</td><td>${esc(p.size)}</td><td>${esc(p.tier)}</td><td>${p.pack}</td><td>${p.price}</td>
+  <td><input type="number" min="0" data-id="${p.id}" data-k="fix" value="${esc(q.fix)}" placeholder="авто" style="width:74px"></td>
+  <td><input type="number" min="0" max="100" data-id="${p.id}" data-k="pct" value="${esc(q.pct)}" placeholder="авто" style="width:74px"></td></tr>`};
  $('app').innerHTML=`
- <div class="card"><h2>Параметры</h2>
+ <div class="card"><h2>1. Каталог</h2>
+  <div class="tabs">${st.genders.map(g=>`<button class="${g===gTab?'on':''}" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+  <div class="row"><div><label>Размер</label><select id="fs">${options(st.sizes,fSize)}</select></div><div><label>Цена</label><select id="ft">${options(st.tiers,fTier)}</select></div></div>
+  <div class="bar"><button class="btn sec" id="all">Выбрать всё показанное</button><button class="btn sec" id="none">Сбросить выбор</button></div>
+  <p class="mut">Отметьте нужные модели. «Упаковок» — точное количество, которое будет в заказе. «%» — доля от оставшейся суммы для остальных моделей. Пустое поле значит «авто»: оставшиеся проценты делятся поровну. Выбрано: <b id="cnt">${selCount()}</b></p>
+  ${cats.length?cats.map(c=>`<h3>${esc(c)}</h3><div class="scroll"><table><tr><th></th><th>Модель</th><th>Размер</th><th>Цена</th><th>В упак.</th><th>Цена, шт</th><th>Упаковок</th><th>%</th></tr>${vis.filter(p=>(p.cat||'Без категории')===c).map(row).join('')}</table></div>`).join(''):'<p class="mut">В этой категории нет товаров.</p>'}
+ </div>
+ <div class="card"><h2>2. Сумма</h2>
   <div class="row">
-   <div><label>Заказчик</label><input id="cust" placeholder="Имя или компания" value="${esc(tgName)}"></div>
-   <div><label>Сумма заказа (например 5000, 20000, 30000)</label><input id="total" type="number" min="1" value="5000"></div>
-   <div><label>Можно выше суммы, %</label><input id="tol" type="number" min="0" step="0.1" value="1"></div>
+   <div><label>Заказчик</label><input id="cust" value="${esc(form.cust)}" placeholder="Имя или компания"></div>
+   <div><label>Сумма заказа</label><input id="total" type="number" min="1" value="${esc(form.total)}"></div>
+   <div><label>Можно выше суммы, %</label><input id="tol" type="number" min="0" step="0.1" value="${esc(form.tol)}"></div>
   </div>
-  <p></p><label>Пол</label>${chips('fg',S.settings.genders)}
-  <p></p><label>Цена</label>${chips('ft',S.settings.tiers)}
-  <p></p><label>Размер</label>${chips('fs',S.settings.sizes)}
-  <div class="bar"><button class="btn" id="go">Подобрать ассортимент</button></div>
-  <p class="mut">Рядом с каждым пунктом укажите долю суммы в процентах, например дешёвый 70, дорогой 30. Доли считаются отдельно по полу, цене и размеру и перемножаются, поэтому в сумме они не обязаны давать 100. Снятая галочка или 0 убирает пункт. Итог может превысить сумму не больше чем на допуск сверху.</p>
+  <div class="bar"><button class="btn" id="go">Собрать заказ</button></div>
  </div>
  <div id="res"></div>`;
+ $('app').onclick=e=>{const g=e.target.dataset.g;if(g!==undefined){gTab=g;viewOrder()}};
+ $('app').oninput=e=>{
+  const t=e.target,id=t.dataset.id;
+  if(id){
+   const q=P(id),k=t.dataset.k;
+   if(k==='on')q.on=t.checked;
+   else{q[k]=t.value;if(t.value&&!q.on){q.on=true;t.closest('tr').querySelector('[data-k=on]').checked=true}}
+   $('cnt').textContent=selCount();
+  }else if(t.id in form)form[t.id]=t.value;
+ };
+ $('app').onchange=e=>{const t=e.target;if(t.id==='fs'){fSize=t.value;viewOrder()}if(t.id==='ft'){fTier=t.value;viewOrder()}};
+ $('all').onclick=()=>{vis.forEach(p=>P(p.id).on=true);viewOrder()};
+ $('none').onclick=()=>{pick={};viewOrder()};
  $('go').onclick=()=>{
-  const g=weights('fg'),t=weights('ft'),s=weights('fs');
-  const items=S.products.filter(p=>g[p.gender]&&t[p.tier]&&s[p.size]&&p.pack>0&&p.price>0).map(p=>({...p,w:g[p.gender]*t[p.tier]*s[p.size]}));
-  const total=+$('total').value;
-  if(!items.length||!(total>0)){$('res').innerHTML='<div class="card warn">Нет подходящих товаров с ценой или не указана сумма.</div>';return}
-  draft={customer:$('cust').value.trim(),target:total,lines:build(total,items,Math.max(0,+$('tol').value||0))};
+  const total=+form.total,tol=Math.max(0,+form.tol||0);
+  const chosen=S.products.filter(p=>P(p.id).on&&p.pack>0&&p.price>0);
+  if(!chosen.length||!(total>0)){$('res').innerHTML='<div class="card warn">Выберите товары с ценой и укажите сумму.</div>';return}
+  const fixed=[],auto=[];
+  chosen.forEach(p=>{const f=Math.floor(+P(p.id).fix||0);f>0?fixed.push({p,f}):auto.push(p)});
+  const fixCost=fixed.reduce((a,x)=>a+x.f*x.p.pack*x.p.price,0);
+  let given=0,blanks=0;
+  auto.forEach(p=>{const v=+P(p.id).pct||0;v>0?given+=v:blanks++});
+  const share=blanks?Math.max(0,100-given)/blanks:0;
+  const items=auto.map(p=>{const v=+P(p.id).pct||0;return {...p,w:v>0?v:share}}).filter(p=>p.w>0);
+  const rest=total-fixCost,cap=total*(1+tol/100)-fixCost;
+  const lines=[
+   ...fixed.map(x=>({pid:x.p.id,name:x.p.name,pack:x.p.pack,price:x.p.price,packs:x.f,fixed:true})),
+   ...build(rest,items,cap)
+  ];
+  draft={customer:form.cust.trim(),target:total,lines,over:rest<0};
   showDraft();
  };
- if(draft)showDraft(true);
+ if(draft)showDraft();
 }
-function showDraft(keep){
+function showDraft(){
  const d=draft,s=sum(d.lines),diff=d.target-s.money;
- $('res').innerHTML=`<div class="card"><h2>Заказ</h2>
- <div class="scroll"><table><tr><th>Товар</th><th>В упаковке</th><th>Упаковок</th><th>Цена</th><th>Штук</th><th>Сумма</th><th>Доля</th></tr>
- ${d.lines.map((l,i)=>`<tr><td>${esc(l.name)}</td><td>${l.pack}</td><td><input type="number" min="0" value="${l.packs}" data-i="${i}" style="width:80px"></td><td>${l.price}</td><td>${l.pack*l.packs}</td><td>${fmt(l.pack*l.packs*l.price)}</td><td>${s.money?(l.pack*l.packs*l.price/s.money*100).toFixed(1):0}%</td></tr>`).join('')}</table></div>
+ $('res').innerHTML=`<div class="card"><h2>3. Заказ</h2>
+ ${d.over?'<p class="warn">Упаковки с фиксированным количеством уже превышают сумму.</p>':''}
+ <div class="scroll"><table><tr><th>Товар</th><th>В упак.</th><th>Упаковок</th><th>Цена</th><th>Штук</th><th>Сумма</th><th>Доля</th></tr>
+ ${d.lines.map((l,i)=>`<tr><td>${esc(l.name)}${l.fixed?' <span class="mut">(фикс.)</span>':''}</td><td>${l.pack}</td><td><input type="number" min="0" value="${l.packs}" data-i="${i}" style="width:80px"></td><td>${l.price}</td><td>${l.pack*l.packs}</td><td>${fmt(l.pack*l.packs*l.price)}</td><td>${s.money?(l.pack*l.packs*l.price/s.money*100).toFixed(1):0}%</td></tr>`).join('')}</table></div>
  <div class="tot">Итого: ${fmt(s.pcs)} шт, сумма ${fmt(s.money)}${diff>0?` <span class="mut">(не добрано до суммы ${fmt(diff)})</span>`:diff<0?` <span class="mut">(выше суммы на ${fmt(-diff)})</span>`:''}</div>
  <pre id="txt">${esc(orderText(d.lines,''))}</pre>
- <div class="bar"><button class="btn" id="sv">Сохранить в историю</button><button class="btn sec" id="cp">Копировать</button><button class="btn sec" id="sh">Отправить в Telegram</button></div></div>`;
+ <div class="bar"><button class="btn" id="pd">Скачать PDF</button><button class="btn sec" id="sv">Сохранить в историю</button><button class="btn sec" id="cp">Копировать</button><button class="btn sec" id="sh">Отправить в Telegram</button></div></div>`;
  document.querySelectorAll('#res input[data-i]').forEach(inp=>inp.onchange=()=>{d.lines[+inp.dataset.i].packs=Math.max(0,Math.floor(+inp.value||0));showDraft()});
+ const cur=()=>({customer:d.customer||'Без имени',date:new Date().toISOString(),lines:d.lines.filter(l=>l.packs>0).map(l=>({name:l.name,pack:l.pack,packs:l.packs,price:l.price}))});
+ $('pd').onclick=()=>pdfOrder(cur());
  $('cp').onclick=()=>{copy($('txt').textContent);$('cp').textContent='Скопировано'};
- $('sh').onclick=()=>share(($('txt').textContent));
+ $('sh').onclick=()=>share($('txt').textContent);
  $('sv').onclick=()=>{
-  const ls=d.lines.filter(l=>l.packs>0).map(l=>({name:l.name,pack:l.pack,packs:l.packs,price:l.price}));
-  if(!ls.length)return;
-  const ss=sum(ls);
-  S.orders.unshift({id:Date.now(),date:new Date().toISOString(),customer:d.customer||'Без имени',lines:ls,pcs:ss.pcs,money:ss.money});
+  const o=cur();if(!o.lines.length)return;
+  const ss=sum(o.lines);
+  S.orders.unshift({id:Date.now(),date:o.date,customer:o.customer,lines:o.lines,pcs:ss.pcs,money:ss.money});
   save();draft=null;tab='history';render();
  };
+}
+
+/* ---------- PDF ---------- */
+function drawPages(o){
+ const W=1190,H=1684,M=64,RH=46,pages=[],ss=sum(o.lines);
+ let cv,cx,y;
+ const txt=(t,x,yy,f,al)=>{cx.font=f;cx.textAlign=al||'left';cx.fillText(t,x,yy)};
+ const head=()=>{
+  txt('№',M,y+30,'bold 24px Arial');txt('Товар',M+70,y+30,'bold 24px Arial');txt('Расчёт',640,y+30,'bold 24px Arial');
+  txt('Штук',880,y+30,'bold 24px Arial','right');txt('Сумма',W-M,y+30,'bold 24px Arial','right');
+  y+=RH;cx.fillRect(M,y-6,W-2*M,2);
+ };
+ const page=()=>{cv=document.createElement('canvas');cv.width=W;cv.height=H;cx=cv.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,W,H);cx.fillStyle='#000';y=M;pages.push(cv)};
+ page();
+ txt('Заказ',M,y+40,'bold 44px Arial');y+=64;
+ txt('Заказчик: '+o.customer,M,y+26,'26px Arial');y+=40;
+ txt('Дата: '+new Date(o.date).toLocaleString('ru-RU'),M,y+26,'26px Arial');y+=60;
+ head();
+ o.lines.forEach((l,i)=>{
+  if(y+RH>H-M-140){page();head()}
+  let n=l.name;cx.font='24px Arial';while(cx.measureText(n).width>490&&n.length>3)n=n.slice(0,-2);if(n!==l.name)n+='…';
+  txt(String(i+1),M,y+30,'24px Arial');txt(n,M+70,y+30,'24px Arial');
+  txt(lineText(l),640,y+30,'bold 24px Arial');
+  txt(fmt(l.pack*l.packs),880,y+30,'24px Arial','right');txt(fmt(l.pack*l.packs*l.price),W-M,y+30,'24px Arial','right');
+  y+=RH;cx.fillStyle='#bbb';cx.fillRect(M,y-6,W-2*M,1);cx.fillStyle='#000';
+ });
+ y+=20;
+ txt('Итого штук: '+fmt(ss.pcs),M,y+34,'bold 30px Arial');y+=50;
+ txt('Сумма заказа: '+fmt(ss.money),M,y+34,'bold 30px Arial');
+ return pages;
+}
+function makePDF(jp){
+ const enc=new TextEncoder(),parts=[],offs=[];let pos=0;
+ const push=b=>{if(typeof b==='string')b=enc.encode(b);parts.push(b);pos+=b.length};
+ const obj=(n,fn)=>{offs[n]=pos;push(n+' 0 obj\n');fn();push('\nendobj\n')};
+ const N=jp.length;
+ push('%PDF-1.4\n');
+ obj(1,()=>push('<< /Type /Catalog /Pages 2 0 R >>'));
+ obj(2,()=>push('<< /Type /Pages /Count '+N+' /Kids ['+jp.map((_,i)=>(3+3*i)+' 0 R').join(' ')+'] >>'));
+ jp.forEach((j,i)=>{
+  const pg=3+3*i,ct=4+3*i,im=5+3*i,cs='q 595 0 0 842 0 0 cm /Im0 Do Q';
+  obj(pg,()=>push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>`));
+  obj(ct,()=>push(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`));
+  obj(im,()=>{push(`<< /Type /XObject /Subtype /Image /Width ${j.w} /Height ${j.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${j.data.length} >>\nstream\n`);push(j.data);push('\nendstream')});
+ });
+ const total=3+3*N,xref=pos;
+ push('xref\n0 '+total+'\n0000000000 65535 f \n');
+ for(let n=1;n<total;n++)push(String(offs[n]).padStart(10,'0')+' 00000 n \n');
+ push(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+ return new Blob(parts,{type:'application/pdf'});
+}
+function pdfOrder(o){
+ const jp=drawPages(o).map(cv=>{const b=atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return {data:u,w:cv.width,h:cv.height}});
+ const blob=makePDF(jp),name='zakaz-'+o.date.slice(0,10)+'.pdf',file=new File([blob],name,{type:'application/pdf'});
+ if(/Android|iPhone|iPad/i.test(navigator.userAgent)&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:name}).catch(()=>{});return}
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();
 }
 
 /* ---------- история ---------- */
@@ -195,10 +291,11 @@ function viewHistory(){
  <label>Поиск по заказчику</label><input id="hf" value="${esc(histFilter)}" placeholder="Имя">
  <p></p>${list.length?list.map(o=>`<details><summary><b>${esc(o.customer)}</b> — ${new Date(o.date).toLocaleString('ru-RU')} — ${fmt(o.pcs)} шт, ${fmt(o.money)}</summary>
  <pre>${esc(orderText(o.lines,''))}</pre>
- <div class="bar"><button class="btn sec" data-cp="${o.id}">Копировать</button><button class="btn sec" data-sh="${o.id}">Отправить в Telegram</button><button class="btn del" data-del="${o.id}">Удалить</button></div></details>`).join(''):'<p class="mut">Заказов пока нет. Подберите первый на вкладке «Новый заказ».</p>'}</div>`;
+ <div class="bar"><button class="btn sec" data-cp="${o.id}">Копировать</button><button class="btn sec" data-sh="${o.id}">Отправить в Telegram</button><button class="btn sec" data-pdf="${o.id}">PDF</button><button class="btn del" data-del="${o.id}">Удалить</button></div></details>`).join(''):'<p class="mut">Заказов пока нет. Подберите первый на вкладке «Новый заказ».</p>'}</div>`;
  $('hf').oninput=e=>{histFilter=e.target.value;const p=e.target.selectionStart;viewHistory();const n=$('hf');n.focus();n.setSelectionRange(p,p)};
  $('app').onclick=e=>{
-  const c=e.target.dataset.cp,d=e.target.dataset.del,h=e.target.dataset.sh;
+  const c=e.target.dataset.cp,d=e.target.dataset.del,h=e.target.dataset.sh,pf=e.target.dataset.pdf;
+  if(pf)pdfOrder(S.orders.find(x=>x.id==pf));
   if(h){const o=S.orders.find(x=>x.id==h);share(orderText(o.lines,o.customer))}
   if(c){const o=S.orders.find(x=>x.id==c);copy(orderText(o.lines,o.customer));e.target.textContent='Скопировано'}
   if(d&&confirm('Удалить заказ?')){S.orders=S.orders.filter(x=>x.id!=d);save();viewHistory()}
@@ -224,9 +321,10 @@ function viewAdmin(){
  </div></div>
  <div class="card"><h2>Товары</h2>
  <p class="${S.dirty?'warn':'mut'}">${S.dirty?'Изменения есть только на этом устройстве. Чтобы они появились у всех: нажмите «Скачать каталог для сайта» и загрузите файл catalog.json в репозиторий GitHub вместо старого.':'Каталог совпадает с сайтом. После изменений скачайте catalog.json и загрузите в репозиторий, тогда цены обновятся у всех.'}</p><div class="scroll"><table>
- <tr><th>Название</th><th>Пол</th><th>Цена</th><th>Размер</th><th>В упак.</th><th>Цена, шт</th><th></th></tr>
+ <tr><th>Название</th><th>Подкатегория</th><th>Пол</th><th>Цена</th><th>Размер</th><th>В упак.</th><th>Цена, шт</th><th></th></tr>
  ${S.products.map(p=>`<tr>
   <td><input data-p="${p.id}" data-k="name" value="${esc(p.name)}"></td>
+  <td><input data-p="${p.id}" data-k="cat" value="${esc(p.cat||'')}" placeholder="Боксеры"></td>
   <td><select data-p="${p.id}" data-k="gender">${opt(st.genders,p.gender)}</select></td>
   <td><select data-p="${p.id}" data-k="tier">${opt(st.tiers,p.tier)}</select></td>
   <td><select data-p="${p.id}" data-k="size">${opt(st.sizes,p.size)}</select></td>
@@ -245,7 +343,7 @@ function viewAdmin(){
   const r=e.target.dataset.rm;
   if(r&&confirm('Удалить товар?')){S.products=S.products.filter(x=>x.id!=r);S.dirty=true;save();viewAdmin()}
  };
- $('add').onclick=()=>{S.products.push({id:Date.now(),name:'Новый товар',gender:st.genders[0],tier:st.tiers[0],size:st.sizes[0],pack:10,price:0});S.dirty=true;save();viewAdmin()};
+ $('add').onclick=()=>{S.products.push({id:Date.now(),name:'Новый товар',cat:'',gender:st.genders[0],tier:st.tiers[0],size:st.sizes[0],pack:10,price:0});S.dirty=true;save();viewAdmin()};
  $('cat').onclick=()=>{const {pass,...st}=S.settings;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:st,products:S.products},null,1)],{type:'application/json'}));a.download='catalog.json';a.click();S.dirty=false;save();viewAdmin()};
  $('out').onclick=()=>{admin=false;render()};
  $('exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='backup.json';a.click()};
